@@ -13,15 +13,26 @@ server.use(helmet());
 // POST /api/zoos
 server.post('/api/zoos', async (req, res) => {
   try {
-    if (!req.body[0] === 'name') {
-      return res
-        .status(400)
-        .json({ message: 'Please provide only a `name` property.' });
+    for (let key of Object.keys(req.body)) {
+      if (['name'].includes(key)) {
+        continue;
+      } else {
+        return res.status(400).json({
+          message: 'Please check your request properties.',
+          requestProperties: [
+            { name: 'name', required: true, location: 'body' }
+          ]
+        });
+      }
     }
     db('zoos')
-      .returning(['id', 'name'])
       .insert(req.body)
-      .then(newZooAdded => res.status(201).json(newZooAdded));
+      .then(newZooId =>
+        db('zoos')
+          .where('id', newZooId[0])
+          .first()
+          .then(zoo => res.status(201).json(zoo))
+      );
   } catch (error) {
     console.error(error);
     res.status(500).json({
@@ -51,7 +62,7 @@ server.get('/api/zoos/:id', async (req, res) => {
   try {
     db('zoos')
       .where('id', req.params.id)
-      .select('*')
+      .first()
       .then(zoo => res.status(200).json(zoo));
   } catch (error) {
     console.error(error);
@@ -88,15 +99,34 @@ server.delete('/api/zoos/:id', async (req, res) => {
 
 // PUT /api/zoos/:id
 server.put('/api/zoos/:id', (req, res) => {
-  if (!req.body[0] === 'name') {
-    return req
-      .status(400)
-      .json({ message: 'Please provide only a `name` property.' });
+  for (let key of Object.keys(req.body)) {
+    if (['name'].includes(key)) {
+      continue;
+    } else {
+      return res.status(400).json({
+        message: 'Please check your request properties.',
+        requestProperties: [
+          { name: 'id', required: true, location: '/api/zoos/:id'},
+          { name: 'name', required: true, location: 'request body' }
+        ]
+      });
+    }
   }
   db('zoos')
     .where('id', req.params.id)
-    .update(req.body, ['id', 'name'])
-    .then(updatedZoo => res.status(201).json(updatedZoo))
+    .update(req.body)
+    .then(updatedZoo => {
+      if (!updatedZoo) {
+        res
+          .status(404)
+          .json({ message: `Zoo with ID of ${req.params.id} not found.` });
+      } else {
+        db('zoos')
+          .where('id', req.params.id)
+          .first()
+          .then(zoo => res.status(201).json(zoo));
+      }
+    })
     .catch(error => {
       console.error(error);
       res.status(500).json({
